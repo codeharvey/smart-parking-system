@@ -202,6 +202,7 @@ thread_local! {
             MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(5)))
     ));
 }
+
 //ParkingSpotPayload struct
 #[derive(candid::CandidType, Deserialize, Serialize)]
 struct ParkingSpotPayload {
@@ -259,7 +260,7 @@ struct IsAuthenticatedPayload {
 }
 
 // Message enum
-#[derive(candid::CandidType, Deserialize, Serialize)]
+#[derive(candid::CandidType, Deserialize, Serialize, Debug)]
 enum Message {
     Success(String),
     Error(String),
@@ -267,380 +268,18 @@ enum Message {
     InvalidPayload(String),
 }
 
-// Function to create an admin user
-#[ic_cdk::update]
-fn create_admin(payload: UserPayload) -> Result<User, Message> {
-    // Validate the payload to ensure all required fields are provided
-    if payload.username.is_empty()
-        || payload.password.is_empty()
-        || payload.email.is_empty()
-        || payload.phone_number.is_empty()
-        || payload.first_name.is_empty()
-        || payload.last_name.is_empty()
-    {
-        return Err(Message::InvalidPayload(
-            "Ensure 'username', 'password', 'email', 'phone_number', 'first_name', and 'last_name' are provided.".to_string(),
-        ));
-    }
-
-    // Validate the email address
-    if let Err(err) = validate_email(&payload.email) {
-        return Err(Message::InvalidPayload(err));
-    }
-
-    // Ensure email uniqueness
-    if !is_email_unique(&payload.email) {
-        return Err(Message::InvalidPayload(
-            "Email address already exists.".to_string(),
-        ));
-    }
-
-    // Validate the password strength
-    if let Err(err) = validate_password(&payload.password) {
-        return Err(Message::InvalidPayload(err));
-    }
-
-    // Validate the phone number
-    if let Err(err) = validate_phone_number(&payload.phone_number) {
-        return Err(Message::InvalidPayload(err));
-    }
-
-    // Increment the ID counter to generate a new ID for the user
-    let id = ID_COUNTER
-        .with(|counter| {
-            let current_value = *counter.borrow().get();
-            counter.borrow_mut().set(current_value + 1)
-        })
-        .expect("Cannot increment ID counter");
-
-    let user = User {
-        id,
-        username: payload.username,
-        password: payload.password,
-        email: payload.email,
-        phone_number: payload.phone_number,
-        first_name: payload.first_name,
-        last_name: payload.last_name,
-        balance: 0.0, // Initialize balance to zero
-        created_at: current_time(),
-        role: UserRole::Admin,
-    };
-
-    // Store the user in the memory
-    USER_STORAGE.with(|storage| storage.borrow_mut().insert(id, user.clone()));
-    Ok(user)
-}
-
-// Function to get all admin users
-#[ic_cdk::query]
-fn get_admins() -> Result<Vec<User>, Message> {
-    // Retrieve all admin users from the memory
-    USER_STORAGE.with(|storage| {
-        let admins: Vec<User> = storage
-            .borrow()
-            .iter()
-            .filter(|(_, user)| user.role == UserRole::Admin)
-            .map(|(_, user)| user.clone())
-            .collect();
-
-        if admins.is_empty() {
-            Err(Message::NotFound("No admins found".to_string()))
-        } else {
-            Ok(admins)
+// Implementing std::fmt::Display for Message
+impl fmt::Display for Message {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Message::Success(msg) => write!(f, "Success: {}", msg),
+            Message::Error(msg) => write!(f, "Error: {}", msg),
+            Message::NotFound(msg) => write!(f, "NotFound: {}", msg),
+            Message::InvalidPayload(msg) => write!(f, "InvalidPayload: {}", msg),
         }
-    })
+    }
 }
 
-// Function for admin to change user roles
-#[ic_cdk::update]
-fn change_user_role(payload: ChangeUserRolePayload) -> Result<User, Message> {
-    // Validate the user id to ensure it exists
-    let user = USER_STORAGE.with(|storage| {
-        storage
-            .borrow()
-            .iter()
-            .find(|(_, user)| user.id == payload.user_id)
-            .map(|(_, user)| user.clone())
-    });
-    if user.is_none() {
-        return Err(Message::NotFound("User not found".to_string()));
-    }
-
-    // Update the user role
-    let user = user.unwrap();
-    let updated_user = User {
-        role: payload.role,
-        ..user
-    };
-
-    // Store the updated user in the memory
-    USER_STORAGE.with(|storage| storage.borrow_mut().insert(user.id, updated_user.clone()));
-    Ok(updated_user)
-}
-
-// Function to create a new user
-#[ic_cdk::update]
-fn create_user(payload: UserPayload) -> Result<User, Message> {
-    // Validate the payload to ensure all required fields are provided
-    if payload.username.is_empty()
-        || payload.password.is_empty()
-        || payload.email.is_empty()
-        || payload.phone_number.is_empty()
-        || payload.first_name.is_empty()
-        || payload.last_name.is_empty()
-    {
-        return Err(Message::InvalidPayload(
-            "Ensure 'username', 'password', 'email', 'phone_number', 'first_name', and 'last_name' are provided.".to_string(),
-        ));
-    }
-
-    // Validate the email address
-    if let Err(err) = validate_email(&payload.email) {
-        return Err(Message::InvalidPayload(err));
-    }
-
-    // Ensure email uniqueness
-    if !is_email_unique(&payload.email) {
-        return Err(Message::InvalidPayload(
-            "Email address already exists.".to_string(),
-        ));
-    }
-
-    // Validate the password strength
-    if let Err(err) = validate_password(&payload.password) {
-        return Err(Message::InvalidPayload(err));
-    }
-
-    // Validate the phone number
-    if let Err(err) = validate_phone_number(&payload.phone_number) {
-        return Err(Message::InvalidPayload(err));
-    }
-
-    // Increment the ID counter to generate a new ID for the user
-    let id = ID_COUNTER
-        .with(|counter| {
-            let current_value = *counter.borrow().get();
-            counter.borrow_mut().set(current_value + 1)
-        })
-        .expect("Cannot increment ID counter");
-
-    let user = User {
-        id,
-        username: payload.username,
-        password: payload.password,
-        email: payload.email,
-        phone_number: payload.phone_number,
-        first_name: payload.first_name,
-        last_name: payload.last_name,
-        balance: 0.0, // Initialize balance to zero
-        created_at: current_time(),
-        role: UserRole::User, // Default role is User
-    };
-
-    // Store the user in the memory
-    USER_STORAGE.with(|storage| storage.borrow_mut().insert(id, user.clone()));
-    Ok(user)
-}
-
-// Function to get all users
-#[ic_cdk::query]
-fn get_users() -> Result<Vec<User>, Message> {
-    // Retrieve all users from the memory
-    USER_STORAGE.with(|storage| {
-        let users: Vec<User> = storage
-            .borrow()
-            .iter()
-            .map(|(_, user)| user.clone())
-            .collect();
-
-        if users.is_empty() {
-            Err(Message::NotFound("No users found".to_string()))
-        } else {
-            Ok(users)
-        }
-    })
-}
-
-// Function to get a user by ID
-#[ic_cdk::query]
-fn get_user_by_id(id: u64) -> Result<User, Message> {
-    USER_STORAGE.with(|storage| {
-        storage
-            .borrow()
-            .iter()
-            .find(|(_, user)| user.id == id)
-            .map(|(_, user)| user.clone())
-            .ok_or(Message::NotFound("User not found".to_string()))
-    })
-}
-
-// Function to create a parking spot
-#[ic_cdk::update]
-fn create_parking_spot(payload: ParkingSpotPayload) -> Result<ParkingSpot, Message> {
-    // Validate the payload to ensure all required fields are provided
-    if payload.location.is_empty() || payload.price_per_hour <= 0.0 || payload.number_of_spots == 0
-    {
-        return Err(Message::InvalidPayload(
-            "Ensure 'location', 'price_per_hour', and 'number_of_spots' are provided.".to_string(),
-        ));
-    }
-
-    // Ensure the admin is the one creating the parking spot
-    if let Err(err) = is_admin(payload.admin_id) {
-        return Err(Message::Error(err.to_string()));
-    }
-
-    // Increment the ID counter to generate a new ID for the parking spot
-    let id = ID_COUNTER
-        .with(|counter| {
-            let current_value = *counter.borrow().get();
-            counter.borrow_mut().set(current_value + 1)
-        })
-        .expect("Cannot increment ID counter");
-
-    let parking_spot = ParkingSpot {
-        id,
-        admin_id: payload.admin_id,
-        number_of_spots: payload.number_of_spots,
-        location: payload.location,
-        status: ParkingSlotStatus::Available,
-        price_per_hour: payload.price_per_hour,
-        created_at: current_time(),
-    };
-
-    // Store the parking spot in the memory
-    PARKING_SPOT_STORAGE.with(|storage| storage.borrow_mut().insert(id, parking_spot.clone()));
-    Ok(parking_spot)
-}
-
-// Function to get all parking spots
-#[ic_cdk::query]
-fn get_parking_spots() -> Result<Vec<ParkingSpot>, Message> {
-    // Retrieve all parking spots from the memory
-    PARKING_SPOT_STORAGE.with(|storage| {
-        let spots: Vec<ParkingSpot> = storage
-            .borrow()
-            .iter()
-            .map(|(_, spot)| spot.clone())
-            .collect();
-
-        if spots.is_empty() {
-            Err(Message::NotFound("No parking spots found".to_string()))
-        } else {
-            Ok(spots)
-        }
-    })
-}
-
-// Function to get a parking spot by ID
-#[ic_cdk::query]
-fn get_parking_spot_by_id(id: u64) -> Result<ParkingSpot, Message> {
-    PARKING_SPOT_STORAGE.with(|storage| {
-        storage
-            .borrow()
-            .iter()
-            .find(|(_, spot)| spot.id == id)
-            .map(|(_, spot)| spot.clone())
-            .ok_or(Message::NotFound("Parking spot not found".to_string()))
-    })
-}
-
-// Function to create a reservation
-#[ic_cdk::update]
-fn create_reservation(payload: ReservationPayload) -> Result<Reservation, Message> {
-    // Validate the payload to ensure all required fields are provided
-    if payload.duration_hours == 0 {
-        return Err(Message::InvalidPayload(
-            "Ensure 'duration_hours' is greater than zero.".to_string(),
-        ));
-    }
-
-    // Validate the user id to ensure it exists
-    let user = USER_STORAGE.with(|storage| {
-        storage
-            .borrow()
-            .iter()
-            .find(|(_, user)| user.id == payload.user_id)
-            .map(|(_, user)| user.clone())
-    });
-    if user.is_none() {
-        return Err(Message::NotFound("User not found".to_string()));
-    }
-
-    // Validate the parking spot id to ensure it exists
-    let spot = PARKING_SPOT_STORAGE.with(|storage| {
-        storage
-            .borrow()
-            .iter()
-            .find(|(_, spot)| spot.id == payload.spot_id)
-            .map(|(_, spot)| spot.clone())
-    });
-    if spot.is_none() {
-        return Err(Message::NotFound("Parking spot not found".to_string()));
-    }
-
-    // Ensure there are available parking spots
-    let spot = spot.unwrap();
-    if spot.number_of_spots == 0 {
-        return Err(Message::InvalidPayload(
-            "No available parking spots.".to_string(),
-        ));
-    }
-
-    // Calculate amount payable based on the reservation duration and parking spot price
-    let amount_payable = spot.price_per_hour * payload.duration_hours as f64;
-
-    // Reduce the number of available parking spots
-    let updated_spot = ParkingSpot {
-        number_of_spots: spot.number_of_spots - 1,
-        ..spot
-    };
-
-    PARKING_SPOT_STORAGE.with(|storage| storage.borrow_mut().insert(spot.id, updated_spot.clone()));
-
-    // Increment the ID counter to generate a new ID for the reservation
-    let id = ID_COUNTER
-        .with(|counter| {
-            let current_value = *counter.borrow().get();
-            counter.borrow_mut().set(current_value + 1)
-        })
-        .expect("Cannot increment ID counter");
-
-    let reservation = Reservation {
-        id,
-        user_id: payload.user_id,
-        spot_id: payload.spot_id,
-        reserved_at: current_time(),
-        duration_hours: payload.duration_hours,
-        status: "reserved".to_string(),
-        amount_payable,
-        created_at: current_time(),
-    };
-
-    // Store the reservation in the memory
-    RESERVATION_STORAGE.with(|storage| storage.borrow_mut().insert(id, reservation.clone()));
-    Ok(reservation)
-}
-
-// Function to get all reservations
-#[ic_cdk::query]
-fn get_reservations() -> Result<Vec<Reservation>, Message> {
-    RESERVATION_STORAGE.with(|storage| {
-        let reservations: Vec<Reservation> = storage
-            .borrow()
-            .iter()
-            .map(|(_, reservation)| reservation.clone())
-            .collect();
-
-        if reservations.is_empty() {
-            Err(Message::NotFound("No reservations found".to_string()))
-        } else {
-            Ok(reservations)
-        }
-    })
-}
-
-// Function to get a reservation by ID
 #[ic_cdk::query]
 fn get_reservation_by_id(id: u64) -> Result<Reservation, Message> {
     RESERVATION_STORAGE.with(|storage| {
@@ -653,131 +292,289 @@ fn get_reservation_by_id(id: u64) -> Result<Reservation, Message> {
     })
 }
 
-// Function to create a payment
+// Function to create an admin user
 #[ic_cdk::update]
-fn create_payment(payload: PaymentPayload) -> Result<Payment, Message> {
-    // Validate the user payload to ensure all required fields are provided
-    if payload.amount <= 0.0 {
+fn create_admin(payload: UserPayload) -> Result<User, Message> {
+    if let Err(err) = validate_user_payload(&payload) {
+        return Err(Message::InvalidPayload(err));
+    }
+
+    if let Err(err) = validate_email(&payload.email) {
+        return Err(Message::InvalidPayload(err));
+    }
+
+    if !is_email_unique(&payload.email) {
+        return Err(Message::InvalidPayload("Email address already exists.".to_string()));
+    }
+
+    if let Err(err) = validate_password(&payload.password) {
+        return Err(Message::InvalidPayload(err));
+    }
+
+    if let Err(err) = validate_phone_number(&payload.phone_number) {
+        return Err(Message::InvalidPayload(err));
+    }
+
+    let id = increment_id_counter()?;
+
+    let user = User {
+        id,
+        username: payload.username,
+        password: payload.password,
+        email: payload.email,
+        phone_number: payload.phone_number,
+        first_name: payload.first_name,
+        last_name: payload.last_name,
+        balance: 0.0,
+        created_at: current_time(),
+        role: UserRole::Admin,
+    };
+
+    USER_STORAGE.with(|storage| storage.borrow_mut().insert(id, user.clone()));
+
+    log_transaction(user.id, 0.0, 0.0);
+
+    Ok(user)
+}
+
+// Function to create a new user
+#[ic_cdk::update]
+fn create_user(payload: UserPayload) -> Result<User, Message> {
+    if let Err(err) = validate_user_payload(&payload) {
+        return Err(Message::InvalidPayload(err));
+    }
+
+    if let Err(err) = validate_email(&payload.email) {
+        return Err(Message::InvalidPayload(err));
+    }
+
+    if !is_email_unique(&payload.email) {
+        return Err(Message::InvalidPayload("Email address already exists.".to_string()));
+    }
+
+    if let Err(err) = validate_password(&payload.password) {
+        return Err(Message::InvalidPayload(err));
+    }
+
+    if let Err(err) = validate_phone_number(&payload.phone_number) {
+        return Err(Message::InvalidPayload(err));
+    }
+
+    let id = increment_id_counter()?;
+
+    let user = User {
+        id,
+        username: payload.username,
+        password: payload.password,
+        email: payload.email,
+        phone_number: payload.phone_number,
+        first_name: payload.first_name,
+        last_name: payload.last_name,
+        balance: 0.0,
+        created_at: current_time(),
+        role: UserRole::User,
+    };
+
+    USER_STORAGE.with(|storage| storage.borrow_mut().insert(id, user.clone()));
+
+    log_transaction(user.id, 0.0, 0.0);
+
+    Ok(user)
+}
+
+// Function to update user information
+#[ic_cdk::update]
+fn update_user(id: u64, payload: UserPayload) -> Result<User, Message> {
+    let mut user = get_user_by_id(id)?.clone();
+
+    if !payload.email.is_empty() && payload.email != user.email {
+        if let Err(err) = validate_email(&payload.email) {
+            return Err(Message::InvalidPayload(err));
+        }
+
+        if !is_email_unique(&payload.email) {
+            return Err(Message::InvalidPayload("Email address already exists.".to_string()));
+        }
+    }
+
+    if !payload.password.is_empty() {
+        if let Err(err) = validate_password(&payload.password) {
+            return Err(Message::InvalidPayload(err));
+        }
+
+        user.password = payload.password;
+    }
+
+    if let Err(err) = validate_phone_number(&payload.phone_number) {
+        return Err(Message::InvalidPayload(err));
+    }
+
+    user.username = payload.username;
+    user.email = payload.email;
+    user.phone_number = payload.phone_number;
+    user.first_name = payload.first_name;
+    user.last_name = payload.last_name;
+
+    USER_STORAGE.with(|storage| storage.borrow_mut().insert(user.id, user.clone()));
+
+    Ok(user)
+}
+
+// Function to get a user by ID
+#[ic_cdk::query]
+fn get_user_by_id(id: u64) -> Result<User, Message> {
+    USER_STORAGE.with(|storage| {
+        storage
+            .borrow()
+            .get(&id)
+            .map(|user| user.clone())
+            .ok_or(Message::NotFound("User not found".to_string()))
+    })
+}
+
+// Function to change user roles
+#[ic_cdk::update]
+fn change_user_role(payload: ChangeUserRolePayload) -> Result<User, Message> {
+    let mut user = get_user_by_id(payload.user_id)?;
+
+    user.role = payload.role;
+
+    USER_STORAGE.with(|storage| storage.borrow_mut().insert(user.id, user.clone()));
+
+    Ok(user)
+}
+
+// Function to create a parking spot
+#[ic_cdk::update]
+fn create_parking_spot(payload: ParkingSpotPayload) -> Result<ParkingSpot, Message> {
+    if payload.location.is_empty() || payload.price_per_hour <= 0.0 || payload.number_of_spots == 0 {
         return Err(Message::InvalidPayload(
-            "Ensure 'amount' is greater than zero.".to_string(),
+            "Ensure 'location', 'price_per_hour', and 'number_of_spots' are provided.".to_string(),
         ));
     }
 
-    // Validate the reservation id to ensure it exists
-    let reservation = RESERVATION_STORAGE.with(|storage| {
-        storage
-            .borrow()
-            .iter()
-            .find(|(_, reservation)| reservation.id == payload.reservation_id)
-            .map(|(_, reservation)| reservation.clone())
-    });
-    if reservation.is_none() {
-        return Err(Message::NotFound("Reservation not found".to_string()));
+    if let Err(err) = is_admin(payload.admin_id) {
+        return Err(Message::Error(err.to_string()));
     }
 
-    // Validate the payment amount to ensure it matches the expected amount
-    let reservation = reservation.unwrap();
+    let id = increment_id_counter()?;
 
-    // Calculate the expected payment amount based on the reservation duration and parking spot price
-    let spot = PARKING_SPOT_STORAGE
-        .with(|storage| {
-            storage
-                .borrow()
-                .iter()
-                .find(|(_, spot)| spot.id == reservation.spot_id)
-                .map(|(_, spot)| spot.clone())
-        })
-        .unwrap();
+    let parking_spot = ParkingSpot {
+        id,
+        admin_id: payload.admin_id,
+        number_of_spots: payload.number_of_spots,
+        location: payload.location,
+        status: ParkingSlotStatus::Available,
+        price_per_hour: payload.price_per_hour,
+        created_at: current_time(),
+    };
+
+    PARKING_SPOT_STORAGE.with(|storage| storage.borrow_mut().insert(id, parking_spot.clone()));
+
+    Ok(parking_spot)
+}
+
+// Function to update parking spot status
+#[ic_cdk::update]
+fn update_parking_spot_status(id: u64, status: ParkingSlotStatus) -> Result<ParkingSpot, Message> {
+    let mut spot = get_parking_spot_by_id(id)?;
+
+    spot.status = status;
+
+    PARKING_SPOT_STORAGE.with(|storage| storage.borrow_mut().insert(spot.id, spot.clone()));
+
+    Ok(spot)
+}
+
+// Function to get a parking spot by ID
+#[ic_cdk::query]
+fn get_parking_spot_by_id(id: u64) -> Result<ParkingSpot, Message> {
+    PARKING_SPOT_STORAGE.with(|storage| {
+        storage
+            .borrow()
+            .get(&id)
+            .map(|spot| spot.clone())
+            .ok_or(Message::NotFound("Parking spot not found".to_string()))
+    })
+}
+
+// Function to create a reservation
+#[ic_cdk::update]
+fn create_reservation(payload: ReservationPayload) -> Result<Reservation, Message> {
+    if payload.duration_hours == 0 {
+        return Err(Message::InvalidPayload("Ensure 'duration_hours' is greater than zero.".to_string()));
+    }
+
+    let user = get_user_by_id(payload.user_id)?;
+    let mut spot = get_parking_spot_by_id(payload.spot_id)?;
+
+    if spot.number_of_spots == 0 {
+        return Err(Message::InvalidPayload("No available parking spots.".to_string()));
+    }
+
+    let amount_payable = spot.price_per_hour * payload.duration_hours as f64;
+
+    spot.number_of_spots -= 1;
+    PARKING_SPOT_STORAGE.with(|storage| storage.borrow_mut().insert(spot.id, spot.clone()));
+
+    let id = increment_id_counter()?;
+
+    let reservation = Reservation {
+        id,
+        user_id: payload.user_id,
+        spot_id: payload.spot_id,
+        reserved_at: current_time(),
+        duration_hours: payload.duration_hours,
+        status: "reserved".to_string(),
+        amount_payable,
+        created_at: current_time(),
+    };
+
+    RESERVATION_STORAGE.with(|storage| storage.borrow_mut().insert(id, reservation.clone()));
+
+    Ok(reservation)
+}
+
+// Function to create a payment
+#[ic_cdk::update]
+fn create_payment(payload: PaymentPayload) -> Result<Payment, Message> {
+    if payload.amount <= 0.0 {
+        return Err(Message::InvalidPayload("Ensure 'amount' is greater than zero.".to_string()));
+    }
+
+    let reservation = get_reservation_by_id(payload.reservation_id)?;
+
+    let spot = get_parking_spot_by_id(reservation.spot_id)?;
 
     let expected_amount = spot.price_per_hour * reservation.duration_hours as f64;
 
     if (payload.amount - expected_amount).abs() > f64::EPSILON {
-        return Err(Message::InvalidPayload(
-            "Payment amount does not match the expected amount.".to_string(),
-        ));
-    }
-    // If the amount paid by the user is greater than the amount payable
-    // refund the excess amount to the user
-    if payload.amount > expected_amount {
-        let excess_amount = payload.amount - expected_amount;
-        let user = USER_STORAGE.with(|storage| {
-            storage
-                .borrow()
-                .iter()
-                .find(|(_, user)| user.id == reservation.user_id)
-                .map(|(_, user)| user.clone())
-        });
-
-        if user.is_none() {
-            return Err(Message::NotFound("User not found".to_string()));
-        }
-
-        let user = user.unwrap();
-        let updated_user = User {
-            balance: user.balance + excess_amount,
-            ..user
-        };
-
-        USER_STORAGE.with(|storage| storage.borrow_mut().insert(user.id, updated_user.clone()));
+        return Err(Message::InvalidPayload("Payment amount does not match the expected amount.".to_string()));
     }
 
-    // Deduct the amount from the user's balance
-    let user_updated = USER_STORAGE.with(|storage| {
-        let mut storage = storage.borrow_mut();
-        if let Some(mut user) = storage.remove(&reservation.user_id) {
-            if user.balance >= expected_amount {
-                user.balance -= expected_amount;
-                storage.insert(reservation.user_id, user);
-                Ok(())
-            } else {
-                Err(Message::InvalidPayload("Insufficient balance.".to_string()))
-            }
-        } else {
-            Err(Message::NotFound("User not found".to_string()))
-        }
-    });
+    let user = get_user_by_id(reservation.user_id)?;
 
-    if user_updated.is_err() {
-        return user_updated.map(|_| Payment {
-            id: 0,
-            reservation_id: 0,
-            amount: 0.0,
-            status: "".to_string(),
-            created_at: 0,
-        });
+    if user.balance < expected_amount {
+        return Err(Message::InvalidPayload("Insufficient balance.".to_string()));
     }
 
-    // Update the admin's balance using the admin_id field in the ParkingSpot
-    let admin_id = spot.admin_id;
+    let updated_user = User {
+        balance: user.balance - expected_amount,
+        ..user
+    };
 
-    let admin_updated = USER_STORAGE.with(|storage| {
-        let mut storage = storage.borrow_mut();
-        if let Some(mut admin) = storage.remove(&admin_id) {
-            admin.balance += expected_amount;
-            storage.insert(admin_id, admin);
-            Ok(())
-        } else {
-            Err(Message::NotFound("Admin not found".to_string()))
-        }
-    });
+    USER_STORAGE.with(|storage| storage.borrow_mut().insert(user.id, updated_user.clone()));
 
-    if admin_updated.is_err() {
-        return admin_updated.map(|_| Payment {
-            id: 0,
-            reservation_id: 0,
-            amount: 0.0,
-            status: "".to_string(),
-            created_at: 0,
-        });
-    }
+    let admin = get_user_by_id(spot.admin_id)?;
 
-    // Increment the ID counter to generate a new ID for the payment
-    let id = ID_COUNTER
-        .with(|counter| {
-            let current_value = *counter.borrow().get();
-            counter.borrow_mut().set(current_value + 1)
-        })
-        .expect("Cannot increment ID counter");
+    let updated_admin = User {
+        balance: admin.balance + expected_amount,
+        ..admin
+    };
+
+    USER_STORAGE.with(|storage| storage.borrow_mut().insert(admin.id, updated_admin.clone()));
+
+    let id = increment_id_counter()?;
 
     let payment = Payment {
         id,
@@ -786,281 +583,131 @@ fn create_payment(payload: PaymentPayload) -> Result<Payment, Message> {
         status: "completed".to_string(),
         created_at: current_time(),
     };
+
     PAYMENT_STORAGE.with(|storage| storage.borrow_mut().insert(id, payment.clone()));
+
     Ok(payment)
 }
 
-// Function for a user to deposit funds
+// Function to deposit funds
 #[ic_cdk::update]
 fn deposit_funds(
     payload: WithdrawalPayload,
     payload1: IsAuthenticatedPayload,
 ) -> Result<Message, Message> {
-    // Validate the payload to ensure all required fields are provided
     if payload.amount <= 0.0 {
-        return Err(Message::InvalidPayload(
-            "Ensure 'amount' is greater than zero.".to_string(),
-        ));
+        return Err(Message::InvalidPayload("Ensure 'amount' is greater than zero.".to_string()));
     }
 
-    // Ensure the user is authenticated
-    if let Err(err) = is_authenticated(payload1) {
-        return Err(Message::Error(err.to_string()));
-    }
+    is_authenticated(payload1)?;
 
-    // Validate the user id to ensure it exists
-    let user = USER_STORAGE.with(|storage| {
-        storage
-            .borrow()
-            .iter()
-            .find(|(_, user)| user.id == payload.user_id)
-            .map(|(_, user)| user.clone())
-    });
+    let mut user = get_user_by_id(payload.user_id)?;
 
-    if user.is_none() {
-        return Err(Message::NotFound("User not found".to_string()));
-    }
+    user.balance += payload.amount;
 
-    let user = user.unwrap();
-    let updated_user = User {
-        balance: user.balance + payload.amount,
-        ..user
-    };
+    USER_STORAGE.with(|storage| storage.borrow_mut().insert(user.id, user.clone()));
 
-    USER_STORAGE.with(|storage| storage.borrow_mut().insert(user.id, updated_user.clone()));
+    log_transaction(user.id, payload.amount, 0.0);
 
-    // Log the transaction
-    TRANSACTION_LOG.with(|log| {
-        log.borrow_mut().insert(
-            current_time(),
-            Transaction {
-                user_id: payload.user_id,
-                amount: payload.amount,
-                fee: 0.0,
-                timestamp: current_time(),
-            },
-        )
-    });
-
-    // Return a success message
-    Ok(Message::Success(format!(
-        "Deposit of {} successful.",
-        payload.amount
-    )))
+    Ok(Message::Success(format!("Deposit of {} successful.", payload.amount)))
 }
 
-// Function to withdraw funds from a user's balance
+// Function to withdraw funds
 #[ic_cdk::update]
 fn withdraw_funds(
     payload: WithdrawalPayload,
     payload1: IsAuthenticatedPayload,
 ) -> Result<Message, Message> {
     if payload.amount <= 0.0 {
-        return Err(Message::InvalidPayload(
-            "Ensure 'amount' is greater than zero.".to_string(),
-        ));
+        return Err(Message::InvalidPayload("Ensure 'amount' is greater than zero.".to_string()));
     }
 
-    // Ensure the user is authenticated
-    if let Err(err) = is_authenticated(payload1) {
-        return Err(Message::Error(err.to_string()));
-    }
+    is_authenticated(payload1)?;
 
-    // Ensure the admin is the one withdrawing the funds
-    if let Err(err) = is_admin(payload.user_id) {
-        return Err(Message::Error(err.to_string()));
-    }
+    is_admin(payload.user_id)?;
 
-    // Apply transaction fee (e.g., 1%)
     let fee = payload.amount * 0.01;
     let amount_after_fee = payload.amount - fee;
 
-    // Ensure the user has sufficient balance
-    let user = USER_STORAGE.with(|storage| {
-        storage
-            .borrow()
-            .iter()
-            .find(|(_, user)| amount_after_fee <= user.balance)
-            .map(|(_, user)| user.clone())
-    });
+    let mut user = get_user_by_id(payload.user_id)?;
 
-    if user.is_none() {
+    if user.balance < amount_after_fee {
         return Err(Message::InvalidPayload("Insufficient balance.".to_string()));
     }
 
-    // Deduct the amount from the user's balance
-    let user = user.unwrap();
-    let updated_user = User {
-        balance: user.balance - amount_after_fee,
-        ..user
-    };
+    user.balance -= amount_after_fee;
 
-    USER_STORAGE.with(|storage| storage.borrow_mut().insert(user.id, updated_user.clone()));
+    USER_STORAGE.with(|storage| storage.borrow_mut().insert(user.id, user.clone()));
 
-    // Log the transaction
-    TRANSACTION_LOG.with(|log| {
-        log.borrow_mut().insert(
-            current_time(),
-            Transaction {
-                user_id: payload.user_id,
-                amount: payload.amount,
-                fee,
-                timestamp: current_time(),
-            },
-        )
-    });
+    log_transaction(user.id, amount_after_fee, fee);
 
-    // Return a success message
     Ok(Message::Success(format!(
         "Withdrawal of {} successful. Fee applied: {}.",
         amount_after_fee, fee
     )))
 }
 
-// Function to get all payments
-#[ic_cdk::query]
-fn get_payments() -> Result<Vec<Payment>, Message> {
-    PAYMENT_STORAGE.with(|storage| {
-        let payments: Vec<Payment> = storage
-            .borrow()
-            .iter()
-            .map(|(_, payment)| payment.clone())
-            .collect();
+// Function to log transactions
+fn log_transaction(user_id: u64, amount: f64, fee: f64) {
+    let timestamp = current_time();
 
-        if payments.is_empty() {
-            Err(Message::NotFound("No payments found".to_string()))
-        } else {
-            Ok(payments)
-        }
-    })
-}
+    let transaction = Transaction {
+        user_id,
+        amount,
+        fee,
+        timestamp,
+    };
 
-// Function to get a payment by ID
-#[ic_cdk::query]
-fn get_payment_by_id(id: u64) -> Result<Payment, Message> {
-    PAYMENT_STORAGE.with(|storage| {
-        storage
-            .borrow()
-            .iter()
-            .find(|(_, payment)| payment.id == id)
-            .map(|(_, payment)| payment.clone())
-            .ok_or(Message::NotFound("Payment not found".to_string()))
-    })
-}
-
-// Function to get all transactions
-#[ic_cdk::query]
-fn get_transactions() -> Result<Vec<Transaction>, Message> {
-    TRANSACTION_LOG.with(|log| {
-        let transactions: Vec<Transaction> = log
-            .borrow()
-            .iter()
-            .map(|(_, transaction)| transaction.clone())
-            .collect();
-
-        if transactions.is_empty() {
-            Err(Message::NotFound("No transactions found".to_string()))
-        } else {
-            Ok(transactions)
-        }
-    })
-}
-
-// Function to get a transaction by timestamp
-#[ic_cdk::query]
-fn get_transaction_by_timestamp(timestamp: u64) -> Result<Transaction, Message> {
-    TRANSACTION_LOG.with(|log| {
-        log.borrow()
-            .iter()
-            .find(|(_, transaction)| transaction.timestamp == timestamp)
-            .map(|(_, transaction)| transaction.clone())
-            .ok_or(Message::NotFound("Transaction not found".to_string()))
-    })
-}
-
-// Function to get all transactions for a user
-#[ic_cdk::query]
-fn get_user_transactions(user_id: u64) -> Result<Vec<Transaction>, Message> {
-    TRANSACTION_LOG.with(|log| {
-        let transactions: Vec<Transaction> = log
-            .borrow()
-            .iter()
-            .filter(|(_, transaction)| transaction.user_id == user_id)
-            .map(|(_, transaction)| transaction.clone())
-            .collect();
-
-        if transactions.is_empty() {
-            Err(Message::NotFound("No transactions found".to_string()))
-        } else {
-            Ok(transactions)
-        }
-    })
+    TRANSACTION_LOG.with(|log| log.borrow_mut().insert(timestamp, transaction));
 }
 
 // Helper Functions
+fn increment_id_counter() -> Result<u64, Message> {
+    ID_COUNTER.with(|counter: &RefCell<IdCell>| {
+        let current_value = *counter.borrow().get();
+        counter.borrow_mut().set(current_value + 1).map_err(|_| Message::Error("Cannot increment ID counter".to_string()))?;
+        Ok(current_value + 1)
+    })
+}
 
-// Permissions based on the user roles
-fn is_admin(user_id: u64) -> Result<(), Error> {
+fn is_admin(user_id: u64) -> Result<(), Message> {
     USER_STORAGE.with(|storage| {
-        if let Some(user) = storage.borrow().get(&user_id) {
+        storage.borrow().get(&user_id).and_then(|user| {
             if user.role == UserRole::Admin {
-                Ok(())
+                Some(())
             } else {
-                Err(Error::UnAuthorized {
-                    msg: "User is not an admin".to_string(),
-                })
+                None
             }
-        } else {
-            Err(Error::NotFound {
-                msg: "User not found".to_string(),
-            })
-        }
+        }).ok_or(Message::Error("User is not an admin".to_string()))
     })
 }
 
-fn is_user(user_id: u64) -> Result<(), Error> {
+fn is_authenticated(payload: IsAuthenticatedPayload) -> Result<(), Message> {
     USER_STORAGE.with(|storage| {
-        if let Some(user) = storage.borrow().get(&user_id) {
-            if user.role == UserRole::User {
-                Ok(())
-            } else {
-                Err(Error::UnAuthorized {
-                    msg: "User does not have the required role".to_string(),
-                })
-            }
-        } else {
-            Err(Error::NotFound {
-                msg: "User not found".to_string(),
-            })
-        }
-    })
-}
-
-// Function to check user authentication
-fn is_authenticated(payload: IsAuthenticatedPayload) -> Result<(), Error> {
-    USER_STORAGE.with(|storage| {
-        if let Some(user) = storage.borrow().get(&payload.user_id) {
+        storage.borrow().get(&payload.user_id).and_then(|user| {
             if user.password == payload.password {
-                Ok(())
+                Some(())
             } else {
-                Err(Error::UnAuthorized {
-                    msg: "Invalid password".to_string(),
-                })
+                None
             }
-        } else {
-            Err(Error::NotFound {
-                msg: "User not found".to_string(),
-            })
-        }
+        }).ok_or(Message::Error("Invalid credentials".to_string()))
     })
 }
 
-// Helper function to get the current time
-fn current_time() -> u64 {
-    time()
+fn validate_user_payload(payload: &UserPayload) -> Result<(), String> {
+    if payload.username.is_empty()
+        || payload.password.is_empty()
+        || payload.email.is_empty()
+        || payload.phone_number.is_empty()
+        || payload.first_name.is_empty()
+        || payload.last_name.is_empty()
+    {
+        return Err("Ensure 'username', 'password', 'email', 'phone_number', 'first_name', and 'last_name' are provided.".to_string());
+    }
+
+    Ok(())
 }
 
-// Helper function to validate the password strength
 fn validate_password(password: &str) -> Result<(), String> {
     let min_length = 8;
     let has_uppercase = Regex::new(r"[A-Z]").unwrap();
@@ -1096,7 +743,6 @@ fn validate_password(password: &str) -> Result<(), String> {
     Ok(())
 }
 
-// Helper function to validate the user email address
 fn validate_email(email: &str) -> Result<(), String> {
     let email_regex = Regex::new(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$").unwrap();
     if !email_regex.is_match(email) {
@@ -1106,7 +752,6 @@ fn validate_email(email: &str) -> Result<(), String> {
     Ok(())
 }
 
-// Helper function to validate the user phone number
 fn validate_phone_number(phone_number: &str) -> Result<(), String> {
     let phone_number_regex = Regex::new(r"^\+?1?\d{9,15}$").unwrap();
     if !phone_number_regex.is_match(phone_number) {
@@ -1116,35 +761,12 @@ fn validate_phone_number(phone_number: &str) -> Result<(), String> {
     Ok(())
 }
 
-// Helper to make sure the user email address is unique
 fn is_email_unique(email: &str) -> bool {
     USER_STORAGE.with(|storage| storage.borrow().iter().all(|(_, user)| user.email != email))
 }
 
-// Helper Function to check withdrawal limits
-fn check_withdrawal_limits(user_id: u64, amount: f64) -> Result<(), Error> {
-    let user = USER_STORAGE.with(|storage| {
-        storage
-            .borrow()
-            .iter()
-            .find(|(_, user)| user.id == user_id)
-            .map(|(_, user)| user.clone())
-    });
-
-    if user.is_none() {
-        return Err(Error::NotFound {
-            msg: "User not found".to_string(),
-        });
-    }
-
-    let user = user.unwrap();
-    if user.balance < amount {
-        return Err(Error::UnAuthorized {
-            msg: "Insufficient balance".to_string(),
-        });
-    }
-
-    Ok(())
+fn current_time() -> u64 {
+    time()
 }
 
 // Error type for the application
