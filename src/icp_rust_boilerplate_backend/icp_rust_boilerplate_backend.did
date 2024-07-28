@@ -1,0 +1,108 @@
+type ChangeUserRolePayload = record { role : UserRole; user_id : nat64 };
+type IsAuthenticatedPayload = record { password : text; user_id : nat64 };
+type Message = variant {
+  Error : text;
+  InvalidPayload : text;
+  NotFound : text;
+  Success : text;
+};
+type ParkingSlotStatus = variant { Available; Occupied };
+type ParkingSpot = record {
+  id : nat64;
+  status : ParkingSlotStatus;
+  price_per_hour : float64;
+  admin_id : nat64;
+  created_at : nat64;
+  number_of_spots : nat64;
+  location : text;
+};
+type ParkingSpotPayload = record {
+  price_per_hour : float64;
+  admin_id : nat64;
+  number_of_spots : nat64;
+  location : text;
+};
+type Payment = record {
+  id : nat64;
+  status : text;
+  reservation_id : nat64;
+  created_at : nat64;
+  amount : float64;
+};
+type PaymentPayload = record { reservation_id : nat64; amount : float64 };
+type Reservation = record {
+  id : nat64;
+  status : text;
+  amount_payable : float64;
+  created_at : nat64;
+  user_id : nat64;
+  duration_hours : nat64;
+  spot_id : nat64;
+  reserved_at : nat64;
+};
+type ReservationPayload = record {
+  user_id : nat64;
+  duration_hours : nat64;
+  spot_id : nat64;
+};
+type Result = variant { Ok : User; Err : Message };
+type Result_1 = variant { Ok : ParkingSpot; Err : Message };
+type Result_10 = variant { Ok : vec Transaction; Err : Message };
+type Result_2 = variant { Ok : Payment; Err : Message };
+type Result_3 = variant { Ok : Reservation; Err : Message };
+type Result_4 = variant { Ok : Message; Err : Message };
+type Result_5 = variant { Ok : vec User; Err : Message };
+type Result_6 = variant { Ok : vec ParkingSpot; Err : Message };
+type Result_7 = variant { Ok : vec Payment; Err : Message };
+type Result_8 = variant { Ok : vec Reservation; Err : Message };
+type Result_9 = variant { Ok : Transaction; Err : Message };
+type Transaction = record {
+  fee : float64;
+  user_id : nat64;
+  timestamp : nat64;
+  amount : float64;
+};
+type User = record {
+  id : nat64;
+  username : text;
+  balance : float64;
+  password : text;
+  role : UserRole;
+  created_at : nat64;
+  email : text;
+  first_name : text;
+  last_name : text;
+  phone_number : text;
+};
+type UserPayload = record {
+  username : text;
+  password : text;
+  email : text;
+  first_name : text;
+  last_name : text;
+  phone_number : text;
+};
+type UserRole = variant { User; Admin };
+type WithdrawalPayload = record { user_id : nat64; amount : float64 };
+service : {
+  change_user_role : (ChangeUserRolePayload) -> (Result);
+  create_admin : (UserPayload) -> (Result);
+  create_parking_spot : (ParkingSpotPayload) -> (Result_1);
+  create_payment : (PaymentPayload) -> (Result_2);
+  create_reservation : (ReservationPayload) -> (Result_3);
+  create_user : (UserPayload) -> (Result);
+  deposit_funds : (WithdrawalPayload, IsAuthenticatedPayload) -> (Result_4);
+  get_admins : () -> (Result_5) query;
+  get_parking_spot_by_id : (nat64) -> (Result_1) query;
+  get_parking_spots : () -> (Result_6) query;
+  get_payment_by_id : (nat64) -> (Result_2) query;
+  get_payments : () -> (Result_7) query;
+  get_reservation_by_id : (nat64) -> (Result_3) query;
+  get_reservations : () -> (Result_8) query;
+  get_transaction_by_timestamp : (nat64) -> (Result_9) query;
+  get_transactions : () -> (Result_10) query;
+  get_user_by_id : (nat64) -> (Result) query;
+  get_user_transactions : (nat64) -> (Result_10) query;
+  get_users : () -> (Result_5) query;
+  withdraw_funds : (WithdrawalPayload, IsAuthenticatedPayload) -> (Result_4);
+}
